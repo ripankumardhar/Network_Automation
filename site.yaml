@@ -9,12 +9,6 @@
      name: nginx
      state: latest
 
-  
-  - name: Stop apache2 
-    service:
-      name: apache2
-      state: stopped
-      enabled: no
 
   - name: start nginx
     service:
