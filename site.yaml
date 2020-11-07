@@ -1,40 +1,22 @@
 ---
-- name: install nginx in servers
+- name: nginx install & start services
   hosts: webservers
   become: true
 
   tasks:
-  - name: install nginx
-    yum:
-     name: nginx
-     state: latest
-
-
-  - name: start nginx
-    service:
-      name: nginx
-      state: started
-       
-- hosts: webservers
-  tasks:
-    - name: Install PHP
-      become: true
-      apt:
-        name: php
-        state: latest
-
-- hosts: webservers
-  tasks:
-    - name: Install PHP-FPM
-      become: true
-      apt:
-        name: php-fpm
-        state: latest
-
-
-- hosts: webservers
-  tasks:
-  - name: create default file for nginx
+  - name: Install nginx php-fpm and php
+    apt:
+      name: ['nginx', 'php-fpm', 'php']
+      state: latest
+      update_cache: yes
+      
+      
+  - name: uninstall apache2 service
+    apt:
+      name: apache2
+      state: absent
+                    
+  - name: create new default for nginx
     become: true
     copy:
       dest: "/etc/nginx/sites-available/default"
@@ -67,8 +49,8 @@
 
           }
 
-- hosts: webservers
-  tasks:
+
+
   - name: create index.php file in required path
     become: true
     copy:
@@ -78,34 +60,40 @@
 
 
   - name: Restart nginx
-    become: yes
+    become: true
     service:
       name=nginx
       state=restarted
-      
 
+- hosts: webservers
+  tasks:
+    - debug: var=ansible_all_ipv4_addresses
+      
 - hosts: haproxy
   become: true
   tasks:
   - name: Install haproxy service
     apt:
      name: haproxy
-     state: latest
+     state: latest     
      update_cache: yes
 
-  - name: Update haproxy configurations
+  - name: Update haproxy config file
     blockinfile:
      path: /etc/haproxy/haproxy.cfg
      block: |
-        frontend http-in
-        bind devhaproxy: 80
-        default_backend    backend_servers
-        option             forwardfor
+        frontend haproxy
+            bind *:80
+            mode http
+            default_backend webservers
 
-        backend backend_servers
-        balance            roundrobin
-        server devA :80 check
-        server devB :80 check
-        server devC :80 check
-
-
+        backend webservers
+            balance roundrobin
+            option forwardfor
+        {%  for server in groups['webservers'] %}
+            server {{ hostvars[server]['inventory_hostname'] }} {{ hostvars[server]['ansible_default_ipv4']['address']}}:80 check
+        {% endfor %}
+                        
+  - name: restart haproxy
+    action: service name=haproxy state=restarted
+   
